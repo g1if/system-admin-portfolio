@@ -1,0 +1,21 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*.log
+*.log
+
+# Backups
+backups/*
+*.backup
+
+# Temporary files
+*.tmp
+*.temp
+
+# Sensitive data
+*password*
+*secret*
+*key*
+.env
