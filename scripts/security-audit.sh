@@ -30,7 +30,7 @@ log() {
 print_header() {
     echo -e "${CYAN}"
     echo "🔒 ==========================================="
-    echo "   АУДИТ БЕЗОПАСНОСТИ СИСТЕМЫ v1.0"
+    echo "   АУДИТ БЕЗОПАСНОСТИ СИСТЕМЫ v1.1"
     echo "   $(date)"
     echo "   Автор: g1if"
     echo "==========================================="
@@ -60,24 +60,33 @@ check_command() {
     fi
 }
 
+# Безопасное получение числового значения
+safe_number() {
+    local value="$1"
+    # Убираем все нецифровые символы
+    value=$(echo "$value" | tr -cd '0-9')
+    if [ -z "$value" ]; then
+        echo "0"
+    else
+        echo "$value"
+    fi
+}
+
 # Проверка обновлений системы
+
 check_updates() {
-    print_section "ПРОВЕРКА ОБНОВЛЕНИЙ СИСТЕМЫ"
+    echo -e "${BLUE}🔍 ПРОВЕРКА ОБНОВЛЕНИЙ СИСТЕМЫ${NC}"
     
-    if [ -f /etc/debian_version ]; then
-        # Debian/Ubuntu
-        if check_command "apt"; then
-            echo "  Проверка обновлений apt..."
-            local update_count=$(apt list --upgradable 2>/dev/null | grep -c upgradable || echo 0)
-            if [ $update_count -gt 0 ]; then
-                print_status "WARN" "Доступно обновлений: $update_count"
-                echo "    Запустите: sudo apt update && sudo apt upgrade"
-            else
-                print_status "OK" "Система обновлена"
-            fi
+    if command -v apt-get &> /dev/null; then
+        echo "  Проверка обновлений apt..."
+        updates=$(apt list --upgradable 2>/dev/null | wc -l)
+        if [ "$updates" -gt 1 ]; then
+            echo -e "  ${YELLOW}⚠️  Доступно обновлений: $((updates-1))${NC}"
+        else
+            echo -e "  ${GREEN}✅ Система обновлена${NC}"
         fi
     else
-        echo "  ℹ️  Проверка обновлений: доступно только для Debian/Ubuntu"
+        echo -e "  ${YELLOW}⚠️  Менеджер пакетов apt не найден${NC}"
     fi
 }
 
@@ -86,18 +95,24 @@ check_password_policy() {
     print_section "ПРОВЕРКА ПАРОЛЬНОЙ ПОЛИТИКИ"
     
     if [ -f /etc/login.defs ]; then
-        local pass_max_days=$(grep "^PASS_MAX_DAYS" /etc/login.defs | awk '{print $2}')
-        local pass_min_days=$(grep "^PASS_MIN_DAYS" /etc/login.defs | awk '{print $2}')
-        local pass_warn_age=$(grep "^PASS_WARN_AGE" /etc/login.defs | awk '{print $2}')
+        local pass_max_days=$(grep "^PASS_MAX_DAYS" /etc/login.defs | awk '{print $2}' | head -1)
+        local pass_min_days=$(grep "^PASS_MIN_DAYS" /etc/login.defs | awk '{print $2}' | head -1)
+        local pass_warn_age=$(grep "^PASS_WARN_AGE" /etc/login.defs | awk '{print $2}' | head -1)
+        
+        pass_max_days=$(safe_number "$pass_max_days")
+        pass_min_days=$(safe_number "$pass_min_days")
+        pass_warn_age=$(safe_number "$pass_warn_age")
         
         echo "  Макс. дней пароля: ${pass_max_days:-Не установлено}"
         echo "  Мин. дней пароля: ${pass_min_days:-Не установлено}"
         echo "  Предупреждение за дней: ${pass_warn_age:-Не установлено}"
         
-        if [ "${pass_max_days:-0}" -gt 90 ]; then
+        if [ "$pass_max_days" -gt 90 ] 2>/dev/null; then
             print_status "WARN" "Слишком долгий срок жизни пароля (>90 дней)"
-        else
+        elif [ "$pass_max_days" -gt 0 ] 2>/dev/null; then
             print_status "OK" "Политика срока жизни пароля в норме"
+        else
+            print_status "WARN" "Политика срока жизни пароля не настроена"
         fi
     else
         print_status "WARN" "Файл login.defs не найден"
@@ -108,11 +123,27 @@ check_password_policy() {
 check_ssh_security() {
     print_section "ПРОВЕРКА БЕЗОПАСНОСТИ SSH"
     
-    if [ -f /etc/ssh/sshd_config ]; then
-        local permit_root=$(grep -i "^PermitRootLogin" /etc/ssh/sshd_config | tail -1 | awk '{print $2}')
-        local password_auth=$(grep -i "^PasswordAuthentication" /etc/ssh/sshd_config | tail -1 | awk '{print $2}')
-        local protocol=$(grep -i "^Protocol" /etc/ssh/sshd_config | tail -1 | awk '{print $2}')
+    local sshd_config_locations=(
+        "/etc/ssh/sshd_config"
+        "/etc/sshd_config"
+        "/usr/local/etc/ssh/sshd_config"
+    )
+    
+    local sshd_config_found=""
+    
+    for config in "${sshd_config_locations[@]}"; do
+        if [ -f "$config" ]; then
+            sshd_config_found="$config"
+            break
+        fi
+    done
+    
+    if [ -n "$sshd_config_found" ]; then
+        local permit_root=$(grep -i "^PermitRootLogin" "$sshd_config_found" | tail -1 | awk '{print $2}' | tr -d ' ')
+        local password_auth=$(grep -i "^PasswordAuthentication" "$sshd_config_found" | tail -1 | awk '{print $2}' | tr -d ' ')
+        local protocol=$(grep -i "^Protocol" "$sshd_config_found" | tail -1 | awk '{print $2}' | tr -d ' ')
         
+        echo "  Файл конфигурации: $sshd_config_found"
         echo "  Root доступ: ${permit_root:-Не установлено}"
         echo "  Аутентификация паролем: ${password_auth:-Не установлено}"
         echo "  Протокол: ${protocol:-Не установлено}"
@@ -128,8 +159,14 @@ check_ssh_security() {
         else
             print_status "OK" "Аутентификация только по ключу"
         fi
+        
+        if [ "${protocol:-2}" = "2" ]; then
+            print_status "OK" "Используется протокол SSH 2"
+        else
+            print_status "WARN" "Устаревшая версия протокола SSH"
+        fi
     else
-        print_status "WARN" "Файл sshd_config не найден"
+        print_status "INFO" "SSH сервер не установлен или конфиг не найден"
     fi
 }
 
@@ -137,22 +174,35 @@ check_ssh_security() {
 check_open_ports() {
     print_section "ПРОВЕРКА ОТКРЫТЫХ ПОРТОВ"
     
+    local port_count=0
+    
     if check_command "ss"; then
         echo "  Слушающие порты:"
-        ss -tulpn | grep LISTEN | while read line; do
-            local port=$(echo $line | awk '{print $5}' | rev | cut -d: -f1 | rev)
-            local service=$(echo $line | awk '{print $7}')
-            echo "    Порт $port: $service"
+        ss -tulpn 2>/dev/null | grep LISTEN | while read -r line; do
+            local port=$(echo "$line" | awk '{print $5}' | rev | cut -d: -f1 | rev)
+            local service=$(echo "$line" | awk '{print $7}' | cut -d'"' -f2)
+            if [ -n "$port" ] && [ "$port" != "Address" ]; then
+                echo "    Порт $port: ${service:-unknown}"
+                port_count=$((port_count + 1))
+            fi
         done
     elif check_command "netstat"; then
         echo "  Слушающие порты:"
-        netstat -tulpn 2>/dev/null | grep LISTEN | while read line; do
-            local port=$(echo $line | awk '{print $4}' | rev | cut -d: -f1 | rev)
-            local service=$(echo $line | awk '{print $7}')
-            echo "    Порт $port: $service"
+        netstat -tulpn 2>/dev/null | grep LISTEN | while read -r line; do
+            local port=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f1 | rev)
+            local service=$(echo "$line" | awk '{print $7}')
+            if [ -n "$port" ] && [ "$port" != "Address" ]; then
+                echo "    Порт $port: ${service:-unknown}"
+                port_count=$((port_count + 1))
+            fi
         done
     else
         echo "  ℹ️  Команды ss/netstat не найдены"
+        return
+    fi
+    
+    if [ "$port_count" -eq 0 ]; then
+        echo "  ℹ️  Открытые порты не найдены"
     fi
 }
 
@@ -160,15 +210,26 @@ check_open_ports() {
 check_suid_files() {
     print_section "ПРОВЕРКА SUID ФАЙЛОВ"
     
-    local suid_count=0
     if check_command "find"; then
-        suid_count=$(find / -perm -4000 -type f 2>/dev/null | wc -l)
+        echo "  Поиск SUID файлов (может занять время)..."
+        local suid_count=0
+        # Ищем SUID файлы, исключая некоторые стандартные пути
+        suid_count=$(find / -type f -perm -4000 2>/dev/null | \
+                    grep -v "^/proc" | \
+                    grep -v "^/sys" | \
+                    grep -v "^/dev" | \
+                    grep -v "^/run" | \
+                    wc -l)
+        
+        suid_count=$(safe_number "$suid_count")
         echo "  Найдено SUID файлов: $suid_count"
         
-        if [ $suid_count -gt 50 ]; then
+        if [ "$suid_count" -gt 100 ]; then
             print_status "WARN" "Много SUID файлов ($suid_count), рекомендуется проверить"
-        else
+        elif [ "$suid_count" -gt 0 ]; then
             print_status "OK" "Количество SUID файлов в норме"
+        else
+            print_status "INFO" "SUID файлы не найдены"
         fi
     else
         echo "  ℹ️  Команда find не найдена"
@@ -179,16 +240,30 @@ check_suid_files() {
 check_users() {
     print_section "ПРОВЕРКА ПОЛЬЗОВАТЕЛЕЙ"
     
-    local users_with_shell=$(getent passwd | grep -v "nologin" | grep -v "false" | cut -d: -f1 | wc -l)
-    local empty_password=$(awk -F: '($2 == "") {print $1}' /etc/shadow 2>/dev/null | wc -l)
+    local users_with_shell=0
+    local empty_password=0
     
-    echo "  Пользователей с shell: $users_with_shell"
-    echo "  Пользователей с пустым паролем: $empty_password"
-    
-    if [ $empty_password -gt 0 ]; then
-        print_status "ERROR" "Обнаружены пользователи с пустыми паролями!"
+    if check_command "getent"; then
+        users_with_shell=$(getent passwd | grep -v "nologin" | grep -v "false" | cut -d: -f1 | wc -l)
+        users_with_shell=$(safe_number "$users_with_shell")
+        
+        if [ -f /etc/shadow ] && [ -r /etc/shadow ]; then
+            empty_password=$(awk -F: '($2 == "" || $2 == "!") {print $1}' /etc/shadow 2>/dev/null | wc -l)
+            empty_password=$(safe_number "$empty_password")
+        else
+            empty_password="N/A"
+        fi
+        
+        echo "  Пользователей с shell: $users_with_shell"
+        echo "  Пользователей с пустым паролем: $empty_password"
+        
+        if [ "$empty_password" != "N/A" ] && [ "$empty_password" -gt 0 ]; then
+            print_status "ERROR" "Обнаружены пользователи с пустыми паролями!"
+        else
+            print_status "OK" "Пустые пароли не обнаружены"
+        fi
     else
-        print_status "OK" "Пустые пароли не обнаружены"
+        echo "  ℹ️  Команда getent не найдена"
     fi
 }
 
@@ -196,26 +271,93 @@ check_users() {
 check_firewall() {
     print_section "ПРОВЕРКА ФАЙРВОЛА"
     
+    local firewall_found=0
+    
     if check_command "ufw"; then
-        local ufw_status=$(ufw status 2>/dev/null | grep "Status")
+        firewall_found=1
+        local ufw_status
+        ufw_status=$(ufw status 2>/dev/null | head -1 || echo "Status: unknown")
         echo "  UFW: $ufw_status"
         
         if echo "$ufw_status" | grep -q "active"; then
             print_status "OK" "UFW включен"
+            
+            # Показываем правила
+            local ufw_rules=$(ufw status numbered 2>/dev/null | grep -c "^\[" || echo 0)
+            echo "  Правил UFW: $ufw_rules"
         else
             print_status "WARN" "UFW отключен"
         fi
-    elif check_command "iptables"; then
-        local iptables_rules=$(iptables -L 2>/dev/null | grep -c "^ACCEPT\|^DROP\|^REJECT" || echo 0)
-        echo "  Правил iptables: $iptables_rules"
-        
-        if [ $iptables_rules -gt 0 ]; then
+    fi
+    
+    if check_command "iptables"; then
+        firewall_found=1
+        local iptables_rules=0
+        if iptables -L INPUT 2>/dev/null | grep -q "policy DROP"; then
+            iptables_rules=$(iptables -L 2>/dev/null | grep -c "^ACCEPT\|^DROP\|^REJECT" || echo 0)
+            echo "  IPTables: настроен (политика DROP на INPUT)"
+            echo "  Правил iptables: $iptables_rules"
             print_status "OK" "IPTables настроен"
         else
-            print_status "WARN" "IPTables не настроен"
+            echo "  IPTables: базовая политика не DROP"
+            print_status "WARN" "IPTables не настроен строго"
         fi
-    else
+    fi
+    
+    if check_command "firewalld"; then
+        firewall_found=1
+        if systemctl is-active firewalld >/dev/null 2>&1; then
+            echo "  Firewalld: активен"
+            print_status "OK" "Firewalld включен"
+        else
+            echo "  Firewalld: не активен"
+            print_status "WARN" "Firewalld отключен"
+        fi
+    fi
+    
+    if [ "$firewall_found" -eq 0 ]; then
         print_status "WARN" "Файрвол не обнаружен"
+    fi
+}
+
+# Проверка настроек ядра
+check_kernel_security() {
+    print_section "ПРОВЕРКА НАСТРОЕК ЯДРА"
+    
+    local kernel_settings=(
+        "net.ipv4.ip_forward:0"
+        "kernel.dmesg_restrict:1"
+        "kernel.kptr_restrict:2"
+        "net.ipv4.conf.all.accept_redirects:0"
+        "net.ipv4.conf.all.send_redirects:0"
+    )
+    
+    local secure_count=0
+    local total_checks=${#kernel_settings[@]}
+    
+    for setting in "${kernel_settings[@]}"; do
+        local key="${setting%:*}"
+        local expected="${setting#*:}"
+        local actual
+        
+        if actual=$(sysctl -n "$key" 2>/dev/null); then
+            if [ "$actual" = "$expected" ]; then
+                secure_count=$((secure_count + 1))
+                echo "  ✅ $key = $actual"
+            else
+                echo "  ⚠️  $key = $actual (ожидается: $expected)"
+            fi
+        else
+            echo "  ❓ $key: недоступно"
+        fi
+    done
+    
+    if [ "$secure_count" -eq "$total_checks" ]; then
+        print_status "OK" "Настройки ядра безопасны"
+    elif [ "$secure_count" -gt $((total_checks / 2)) ]; then
+        print_status "WARN" "Некоторые настройки ядра не оптимальны"
+    else
+        print_status "ERROR" "Многие настройки ядра небезопасны"
     fi
 }
 
@@ -231,6 +373,7 @@ main() {
     check_suid_files
     check_users
     check_firewall
+    check_kernel_security
     
     echo ""
     echo -e "${GREEN}✅ Аудит безопасности завершен${NC}"
@@ -250,9 +393,11 @@ main() {
 case "${1:-}" in
     "quick")
         # Быстрая проверка
+        echo -e "${CYAN}🔍 Быстрая проверка безопасности...${NC}"
         check_updates
         check_ssh_security
         check_firewall
+        check_open_ports
         ;;
     "help")
         echo "Использование: $0 [quick|help]"
@@ -265,4 +410,3 @@ case "${1:-}" in
         main
         ;;
 esac
-EOF
