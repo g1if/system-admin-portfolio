@@ -28,7 +28,7 @@ ALERT_LOG="$ALERT_DIR/alert-history.log"
 print_header() {
     echo -e "${CYAN}"
     echo "🚨 ==========================================="
-    echo "   СИСТЕМА ОПОВЕЩЕНИЙ v1.1"
+    echo "   СИСТЕМА ОПОВЕЩЕНИЙ v1.2"
     echo "   $(date)"
     echo "   Автор: g1if"
     echo "==========================================="
@@ -104,7 +104,7 @@ load_config() {
         DISK_WARNING=80
         TEMP_CRITICAL=80
         TEMP_WARNING=70
-        CHECK_INTERVAL=60
+        CHECK_INTERVAL=5
         ALERT_METHODS=("log" "console")
     fi
 }
@@ -116,17 +116,97 @@ get_cpu_usage() {
 }
 
 get_memory_usage() {
-    local memory_info=$(free | grep Mem)
-    local total_mem=$(echo $memory_info | awk '{print $2}')
-    local available_mem=$(echo $memory_info | awk '{print $7}')
+    # Используем free для получения информации о памяти (работает с русской локалью)
+    local memory_info=$(free | grep -E "(Память:|Mem:)" | head -1)
     
-    if [ -n "$total_mem" ] && [ -n "$available_mem" ] && [ "$total_mem" -ne 0 ]; then
-        local used_mem=$((total_mem - available_mem))
-        local usage_percent=$((used_mem * 100 / total_mem))
-        echo "$usage_percent"
-    else
-        echo "0"
+    if [ -z "$memory_info" ]; then
+        # Пробуем английскую локаль
+        memory_info=$(free | grep "Mem:" | head -1)
     fi
+    
+    if [ -z "$memory_info" ]; then
+        echo "0"
+        return
+    fi
+    
+    # Извлекаем числа из строки (вне зависимости от локали)
+    local total_mem=$(echo $memory_info | awk '{print $2}')
+    local used_mem=$(echo $memory_info | awk '{print $3}')
+    
+    # Проверяем, что значения валидны
+    if [ -z "$total_mem" ] || [ -z "$used_mem" ] || [ "$total_mem" -eq 0 ]; then
+        echo "0"
+        return
+    fi
+    
+    # Правильный расчет использования памяти
+    local usage_percent=$((used_mem * 100 / total_mem))
+    echo "$usage_percent"
+}
+
+# Альтернативная функция через /proc/meminfo (более надежная)
+get_memory_usage_alt() {
+    local total_mem=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local available_mem=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    
+    if [ -z "$total_mem" ] || [ -z "$available_mem" ] || [ "$total_mem" -eq 0 ]; then
+        echo "0"
+        return
+    fi
+    
+    local used_mem=$((total_mem - available_mem))
+    local usage_percent=$((used_mem * 100 / total_mem))
+    echo "$usage_percent"
+}
+
+# Отладочная информация о памяти
+debug_memory() {
+    echo "=== ОТЛАДКА ПАМЯТИ ==="
+    echo "Сырые данные free:"
+    free
+    echo ""
+    echo "Сырые данные free -m:"
+    free -m
+    echo ""
+    echo "Сырые данные free -h:"
+    free -h
+    echo ""
+    
+    # Тестируем обе функции
+    echo "=== РАСЧЕТ ИСПОЛЬЗОВАНИЯ ПАМЯТИ ==="
+    local memory_info=$(free | grep -E "(Память:|Mem:)" | head -1)
+    echo "Найдена строка: $memory_info"
+    
+    local total_mem=$(echo $memory_info | awk '{print $2}')
+    local used_mem=$(echo $memory_info | awk '{print $3}')
+    
+    echo "Total: $total_mem"
+    echo "Used: $used_mem"
+    
+    if [ -n "$total_mem" ] && [ -n "$used_mem" ] && [ "$total_mem" -ne 0 ]; then
+        echo "Расчет: ($used_mem * 100 / $total_mem) = $((used_mem * 100 / total_mem))%"
+    else
+        echo "Ошибка: не удалось извлечь данные"
+    fi
+    
+    echo ""
+    echo "=== АЛЬТЕРНАТИВНЫЙ РАСЧЕТ (/proc/meminfo) ==="
+    local total_mem_alt=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local available_mem_alt=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    
+    echo "MemTotal: $total_mem_alt KB"
+    echo "MemAvailable: $available_mem_alt KB"
+    
+    if [ -n "$total_mem_alt" ] && [ -n "$available_mem_alt" ] && [ "$total_mem_alt" -ne 0 ]; then
+        local used_mem_alt=$((total_mem_alt - available_mem_alt))
+        echo "Used (calculated): $used_mem_alt KB"
+        echo "Расчет: ($used_mem_alt * 100 / $total_mem_alt) = $((used_mem_alt * 100 / total_mem_alt))%"
+    fi
+    
+    echo ""
+    echo "=== РЕЗУЛЬТАТЫ ФУНКЦИЙ ==="
+    echo "get_memory_usage: $(get_memory_usage)%"
+    echo "get_memory_usage_alt: $(get_memory_usage_alt)%"
 }
 
 get_disk_usage() {
@@ -280,41 +360,41 @@ show_status() {
     local disk_usage=$(get_disk_usage)
     local temp=$(get_temperature)
     
-    echo "  💻 CPU: ${cpu_usage}%"
+    echo -n "  💻 CPU: ${cpu_usage}% - "
     if [ "$cpu_usage" -ge "$CPU_CRITICAL" ] 2>/dev/null; then
-        print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+        print_alert "КРИТИЧЕСКИЙ УРОВЕНЬ"
     elif [ "$cpu_usage" -ge "$CPU_WARNING" ] 2>/dev/null; then
-        print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+        print_warning "ПРЕДУПРЕЖДЕНИЕ"
     else
-        print_success "  ✅ НОРМА"
+        print_success "НОРМА"
     fi
     
-    echo "  🧠 Память: ${mem_usage}%"
+    echo -n "  🧠 Память: ${mem_usage}% - "
     if [ "$mem_usage" -ge "$MEMORY_CRITICAL" ] 2>/dev/null; then
-        print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+        print_alert "КРИТИЧЕСКИЙ УРОВЕНЬ"
     elif [ "$mem_usage" -ge "$MEMORY_WARNING" ] 2>/dev/null; then
-        print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+        print_warning "ПРЕДУПРЕЖДЕНИЕ"
     else
-        print_success "  ✅ НОРМА"
+        print_success "НОРМА"
     fi
     
-    echo "  💾 Диск: ${disk_usage}%"
+    echo -n "  💾 Диск: ${disk_usage}% - "
     if [ "$disk_usage" -ge "$DISK_CRITICAL" ] 2>/dev/null; then
-        print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+        print_alert "КРИТИЧЕСКИЙ УРОВЕНЬ"
     elif [ "$disk_usage" -ge "$DISK_WARNING" ] 2>/dev/null; then
-        print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+        print_warning "ПРЕДУПРЕЖДЕНИЕ"
     else
-        print_success "  ✅ НОРМА"
+        print_success "НОРМА"
     fi
     
     if [ "$temp" != "N/A" ]; then
-        echo "  🌡️  Температура: ${temp}°C"
+        echo -n "  🌡️  Температура: ${temp}°C - "
         if [ "$temp" -ge "$TEMP_CRITICAL" ] 2>/dev/null; then
-            print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+            print_alert "КРИТИЧЕСКИЙ УРОВЕНЬ"
         elif [ "$temp" -ge "$TEMP_WARNING" ] 2>/dev/null; then
-            print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+            print_warning "ПРЕДУПРЕЖДЕНИЕ"
         else
-            print_success "  ✅ НОРМА"
+            print_success "НОРМА"
         fi
     fi
 }
@@ -343,6 +423,9 @@ main() {
             echo "  🧪 ТЕСТОВАЯ ПРОВЕРКА МЕТРИК"
             echo ""
             check_metrics
+            ;;
+	"debug-memory")
+            debug_memory
             ;;
         "help"|"--help"|"-h"|"")
             print_header
