@@ -28,7 +28,7 @@ ALERT_LOG="$ALERT_DIR/alert-history.log"
 print_header() {
     echo -e "${CYAN}"
     echo "🚨 ==========================================="
-    echo "   СИСТЕМА ОПОВЕЩЕНИЙ v1.0"
+    echo "   СИСТЕМА ОПОВЕЩЕНИЙ v1.1"
     echo "   $(date)"
     echo "   Автор: g1if"
     echo "==========================================="
@@ -174,32 +174,46 @@ check_metrics() {
     local disk_usage=$(get_disk_usage)
     local temp=$(get_temperature)
     
+    local has_alerts=0
+    
     # Проверка CPU
     if [ "$cpu_usage" -ge "$CPU_CRITICAL" ] 2>/dev/null; then
         log_alert "CRITICAL" "Высокая загрузка CPU: ${cpu_usage}% (порог: ${CPU_CRITICAL}%)"
+        has_alerts=1
     elif [ "$cpu_usage" -ge "$CPU_WARNING" ] 2>/dev/null; then
         log_alert "WARNING" "Загрузка CPU повышена: ${cpu_usage}% (порог: ${CPU_WARNING}%)"
+        has_alerts=1
     fi
     
     # Проверка памяти
     if [ "$mem_usage" -ge "$MEMORY_CRITICAL" ] 2>/dev/null; then
         log_alert "CRITICAL" "Высокое использование памяти: ${mem_usage}% (порог: ${MEMORY_CRITICAL}%)"
+        has_alerts=1
     elif [ "$mem_usage" -ge "$MEMORY_WARNING" ] 2>/dev/null; then
         log_alert "WARNING" "Использование памяти повышено: ${mem_usage}% (порог: ${MEMORY_WARNING}%)"
+        has_alerts=1
     fi
     
     # Проверка диска
     if [ "$disk_usage" -ge "$DISK_CRITICAL" ] 2>/dev/null; then
         log_alert "CRITICAL" "Высокое использование диска: ${disk_usage}% (порог: ${DISK_CRITICAL}%)"
+        has_alerts=1
     elif [ "$disk_usage" -ge "$DISK_WARNING" ] 2>/dev/null; then
         log_alert "WARNING" "Использование диска повышено: ${disk_usage}% (порог: ${DISK_WARNING}%)"
+        has_alerts=1
     fi
     
     # Проверка температуры
     if [ "$temp" != "N/A" ] && [ "$temp" -ge "$TEMP_CRITICAL" ] 2>/dev/null; then
         log_alert "CRITICAL" "Высокая температура CPU: ${temp}°C (порог: ${TEMP_CRITICAL}°C)"
+        has_alerts=1
     elif [ "$temp" != "N/A" ] && [ "$temp" -ge "$TEMP_WARNING" ] 2>/dev/null; then
         log_alert "WARNING" "Температура CPU повышена: ${temp}°C (порог: ${TEMP_WARNING}°C)"
+        has_alerts=1
+    fi
+    
+    if [ $has_alerts -eq 0 ]; then
+        echo "  ✅ Все метрики в норме"
     fi
 }
 
@@ -221,6 +235,18 @@ monitor_mode() {
     while true; do
         counter=$((counter + 1))
         echo "======= Проверка #$counter ($(date '+%H:%M:%S')) ======="
+        # Показываем текущие значения
+        local cpu_usage=$(get_cpu_usage)
+        local mem_usage=$(get_memory_usage)
+        local disk_usage=$(get_disk_usage)
+        local temp=$(get_temperature)
+        echo "  📊 Текущие значения:"
+        echo "    💻 CPU: ${cpu_usage}%"
+        echo "    🧠 Память: ${mem_usage}%"
+        echo "    💾 Диск: ${disk_usage}%"
+        echo "    🌡️  Температура: ${temp}°C"
+        echo ""
+        echo "  🔍 Результаты проверки:"
         check_metrics
         echo "======================================"
         echo ""
@@ -256,39 +282,39 @@ show_status() {
     
     echo "  💻 CPU: ${cpu_usage}%"
     if [ "$cpu_usage" -ge "$CPU_CRITICAL" ] 2>/dev/null; then
-        print_alert "    🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+        print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
     elif [ "$cpu_usage" -ge "$CPU_WARNING" ] 2>/dev/null; then
-        print_warning "    ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+        print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
     else
-        print_success "    ✅ НОРМА"
+        print_success "  ✅ НОРМА"
     fi
     
     echo "  🧠 Память: ${mem_usage}%"
     if [ "$mem_usage" -ge "$MEMORY_CRITICAL" ] 2>/dev/null; then
-        print_alert "    🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+        print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
     elif [ "$mem_usage" -ge "$MEMORY_WARNING" ] 2>/dev/null; then
-        print_warning "    ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+        print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
     else
-        print_success "    ✅ НОРМА"
+        print_success "  ✅ НОРМА"
     fi
     
     echo "  💾 Диск: ${disk_usage}%"
     if [ "$disk_usage" -ge "$DISK_CRITICAL" ] 2>/dev/null; then
-        print_alert "    🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+        print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
     elif [ "$disk_usage" -ge "$DISK_WARNING" ] 2>/dev/null; then
-        print_warning "    ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+        print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
     else
-        print_success "    ✅ НОРМА"
+        print_success "  ✅ НОРМА"
     fi
     
     if [ "$temp" != "N/A" ]; then
         echo "  🌡️  Температура: ${temp}°C"
         if [ "$temp" -ge "$TEMP_CRITICAL" ] 2>/dev/null; then
-            print_alert "    🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
+            print_alert "  🚨 КРИТИЧЕСКИЙ УРОВЕНЬ"
         elif [ "$temp" -ge "$TEMP_WARNING" ] 2>/dev/null; then
-            print_warning "    ⚠️  ПРЕДУПРЕЖДЕНИЕ"
+            print_warning "  ⚠️  ПРЕДУПРЕЖДЕНИЕ"
         else
-            print_success "    ✅ НОРМА"
+            print_success "  ✅ НОРМА"
         fi
     fi
 }
