@@ -91,24 +91,28 @@ get_disk_info() {
 
 # Анализ inodes
 check_inodes() {
-    print_section "АНАЛИЗ INODES"
-    
+    echo "💿 АНАЛИЗ INODES"
     echo "  🔍 Использование inodes:"
-    df -i | grep -E '^/dev/' | while read -r line; do
-        local device=$(echo "$line" | awk '{print $1}')
-        local total_inodes=$(echo "$line" | awk '{print $2}')
-        local used_inodes=$(echo "$line" | awk '{print $3}')
-        local free_inodes=$(echo "$line" | awk '{print $4}')
-        local use_percent=$(echo "$line" | awk '{print $5}')
-        local mount=$(echo "$line" | awk '{print $6}')
+    
+    df -i | grep -v "tmpfs" | grep -v "snap" | tail -n +2 | while read line; do
+        device=$(echo $line | awk '{print $1}')
+        inode_info=$(echo $line | awk '{print $2,$3,$5,$6}')
+        total_inodes=$(echo $inode_info | awk '{print $1}')
+        used_inodes=$(echo $inode_info | awk '{print $2}')
+        percent_used=$(echo $inode_info | awk '{print $3}' | sed 's/%//')
+        mount_point=$(echo $line | awk '{print $6}')
         
-        local percent_num=$(echo "$use_percent" | tr -d '%')
-        if [ "$percent_num" -gt 90 ]; then
-            echo -e "    ${RED}🚨 $device: $used_inodes/$total_inodes inodes ($use_percent) на $mount${NC}"
-        elif [ "$percent_num" -gt 80 ]; then
-            echo -e "    ${YELLOW}⚠️  $device: $used_inodes/$total_inodes inodes ($use_percent) на $mount${NC}"
+        # Проверяем, является ли percent_used числом
+        if [[ "$percent_used" =~ ^[0-9]+$ ]]; then
+            if [ $percent_used -gt 95 ]; then
+                echo "    🔴 $device: $used_inodes/$total_inodes inodes ($percent_used%) на $mount_point"
+            elif [ $percent_used -gt 80 ]; then
+                echo "    🟡 $device: $used_inodes/$total_inodes inodes ($percent_used%) на $mount_point"
+            else
+                echo "    ✅ $device: $used_inodes/$total_inodes inodes ($percent_used%) на $mount_point"
+            fi
         else
-            echo -e "    ${GREEN}✅ $device: $used_inodes/$total_inodes inodes ($use_percent) на $mount${NC}"
+            echo "    ℹ️  $device: $used_inodes/$total_inodes inodes ($percent_used) на $mount_point"
         fi
     done
 }

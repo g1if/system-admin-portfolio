@@ -3,7 +3,7 @@
 # Автор: g1if
 # Репозиторий: https://github.com/g1if/system-admin-portfolio
 
-set -euo pipefail
+set -e
 
 # Определяем абсолютный путь к директории проекта
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

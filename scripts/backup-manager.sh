@@ -3,7 +3,7 @@
 # Автор: g1if
 # Репозиторий: https://github.com/g1if/system-admin-portfolio
 
-set -euo pipefail
+set -e
 
 # Определяем абсолютный путь к директории проекта
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -72,6 +72,32 @@ load_config() {
         BACKUP_EXCLUDES=("*.tmp" "*.log" "cache/*" "node_modules/*" ".git/*")
         log "Используется конфигурация по умолчанию"
     fi
+}
+
+# Проверка доступности источников
+check_sources() {
+    local valid_sources=()
+    for source in "${BACKUP_SOURCES[@]}"; do
+        # Разрешаем переменные в путях (например $HOME)
+        eval source_expanded="$source"
+        if [ -e "$source_expanded" ]; then
+            # Проверяем права доступа
+            if [ -r "$source_expanded" ]; then
+                valid_sources+=("$source_expanded")
+                echo "  ✅ Доступен: $source_expanded"
+            else
+                print_warning "Нет прав на чтение: $source_expanded"
+            fi
+        else
+            print_warning "Источник не найден: $source_expanded"
+        fi
+    done
+    
+    if [ ${#valid_sources[@]} -eq 0 ]; then
+        print_error "Нет доступных источников для бэкапа"
+        return 1
+    fi
+    echo "${valid_sources[@]}"
 }
 
 # Создание конфигурационного файла
@@ -150,51 +176,75 @@ create_backup() {
     print_header
     log "Начало создания бэкапа: $backup_name"
     
-    # Проверка источников
+    # Проверка источников с диагностикой
+    print_section "ПРОВЕРКА ИСТОЧНИКОВ"
     local valid_sources=()
     for source in "${BACKUP_SOURCES[@]}"; do
-        # Разрешаем переменные в путях (например $HOME)
         eval source_expanded="$source"
         if [ -e "$source_expanded" ]; then
-            valid_sources+=("$source_expanded")
-            echo "  📁 Добавлено: $source_expanded"
+            if [ -r "$source_expanded" ]; then
+                valid_sources+=("$source_expanded")
+                echo "  ✅ Доступен: $source_expanded"
+            else
+                print_warning "❌ Нет прав на чтение: $source_expanded"
+            fi
         else
-            print_warning "Источник не найден: $source_expanded"
+            print_warning "📁 Не найден: $source_expanded"
         fi
     done
     
     if [ ${#valid_sources[@]} -eq 0 ]; then
-        print_error "Нет действительных источников для бэкапа"
+        print_error "Нет доступных источников для бэкапа"
+        echo "  💡 Проверьте конфигурацию в: $CONFIG_FILE"
         return 1
     fi
     
-    # Создание архива с исключениями
-    echo "  🗜️  Создание архива..."
+    # Создание архива с правильной обработкой путей
+    print_section "СОЗДАНИЕ АРХИВА"
+    echo "  📦 Создание архива: $(basename "$backup_file")"
     
-    # Строим команду tar с исключениями
-    local tar_cmd="tar -cf \"$backup_file\""
+    # Строим команду tar с массивом для безопасности
+    local tar_cmd=("tar" "-cf" "$backup_file" "--ignore-failed-read")
     
-    # Добавляем исключения если они есть
+    # Добавляем исключения
     if [ ${#BACKUP_EXCLUDES[@]} -gt 0 ]; then
         for exclude in "${BACKUP_EXCLUDES[@]}"; do
-            tar_cmd="$tar_cmd --exclude=\"$exclude\""
+            tar_cmd+=("--exclude=$exclude")
         done
+        echo "  🚫 Исключения: ${BACKUP_EXCLUDES[*]}"
     fi
     
     # Добавляем источники
-    tar_cmd="$tar_cmd ${valid_sources[@]}"
+    for source in "${valid_sources[@]}"; do
+        tar_cmd+=("$source")
+    done
     
-    # Выполняем команду
-    if eval $tar_cmd 2>/dev/null; then
+# Выполняем команду
+echo "  🔄 Выполнение: tar -cf ... (источников: ${#valid_sources[@]})"
+
+# Проверяем, нужны ли права sudo для каких-либо источников
+local need_sudo=0
+for source in "${valid_sources[@]}"; do
+    if [[ "$source" == "/etc"* ]] && [ ! -r "$source" ]; then
+        need_sudo=1
+        break
+    fi
+done
+
+# Выполняем команду с sudo если нужно
+if [ $need_sudo -eq 1 ]; then
+    echo "  🔑 Используем sudo для доступа к системным файлам..."
+    if sudo "${tar_cmd[@]}" 2>> "$LOG_FILE"; then
         local size=0
         if [ -f "$backup_file" ]; then
             size=$(stat -c%s "$backup_file" 2>/dev/null || echo 0)
         fi
-        echo "  📦 Архив создан: $(human_size $size)"
+        echo "  ✅ Архив создан: $(human_size $size)"
         log "Архив создан: $backup_file ($(human_size $size))"
     else
-        print_error "Ошибка создания архива"
-        log "Ошибка создания архива: $backup_file"
+        print_error "Ошибка создания архива с sudo"
+        echo "  📋 Проверьте лог для деталей: $LOG_FILE"
+        log "Ошибка создания архива с sudo. Команда: ${tar_cmd[*]}"
         
         # Удаляем частично созданный файл
         if [ -f "$backup_file" ]; then
@@ -202,7 +252,27 @@ create_backup() {
         fi
         return 1
     fi
-    
+else
+    if "${tar_cmd[@]}" 2>> "$LOG_FILE"; then
+        local size=0
+        if [ -f "$backup_file" ]; then
+            size=$(stat -c%s "$backup_file" 2>/dev/null || echo 0)
+        fi
+        echo "  ✅ Архив создан: $(human_size $size)"
+        log "Архив создан: $backup_file ($(human_size $size))"
+    else
+        print_error "Ошибка создания архива"
+        echo "  📋 Проверьте лог для деталей: $LOG_FILE"
+        log "Ошибка создания архива. Команда: ${tar_cmd[*]}"
+        
+        # Удаляем частично созданный файл
+        if [ -f "$backup_file" ]; then
+            rm -f "$backup_file"
+        fi
+        return 1
+    fi
+fi
+
     # Сжатие
     local compression_tool=$(detect_compression)
     local final_file="$backup_file"
@@ -419,7 +489,7 @@ main() {
             echo -e "${BLUE}📁 ДОСТУПНЫЕ БЭКАПЫ:${NC}"
             ls -la "$BACKUP_DIR" 2>/dev/null | grep -v "total" | grep -v ".gitkeep" || echo "  ℹ️  Бэкапы не найдены"
             ;;
-        "help"|"")
+        "help"|"--help"|"-h"|"")
             print_header
             echo "Использование: $0 {create|clean|stats|restore|config|list|help}"
             echo ""
