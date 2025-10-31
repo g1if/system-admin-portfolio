@@ -21,36 +21,36 @@
 
 ## 📁 Структура проекта
 
-system-admin-portfolio/
-├── 📂 scripts/ # Основные скрипты
-│ ├── 🚨 alert-system.sh # Система оповещений (Email, Telegram)
-│ ├── 💾 backup-manager.sh # Умное резервное копирование
-│ ├── ⚙️ service-manager.sh # Управление системными сервисами
-│ ├── 🖥️ system-monitor.sh # Мониторинг ресурсов в реальном времени
-│ ├── 🔐 ssl-cert-checker.sh # Мониторинг SSL сертификатов
-│ ├── 👥 user-manager.sh # Управление пользователями и группами
-│ ├── 🛡️ security-audit.sh # Комплексная проверка безопасности
-│ ├── 🔥 process-monitor.sh # Мониторинг процессов и ресурсов
-│ ├── 🌐 network-analyzer.sh # Анализ сети и диагностика
-│ ├── 💽 disk-manager.sh # Управление дисками и LVM
-│ ├── 🐳 docker-manager.sh # Управление Docker контейнерами
-│ ├── 📦 package-manager.sh # Управление пакетами и обновлениями
-│ ├── 🕐 cron-manager.sh # Управление cron заданиями
-│ ├── 📊 metrics-collector.sh # Сбор и анализ метрик
-│ ├── 📄 log-analyzer.sh # Анализ логов в реальном времени
-│ ├── 🔧 firewall-manager.sh # Управление фаерволом
-│ ├── 🐳 install-docker.sh # Автоматическая установка Docker
-│ ├── 🔧 git-helper.sh # Продвинутый Git помощник
-│ └── 🧪 test-all-scripts.sh # Комплексное тестирование
-├── 📂 docs/ # Подробная документация
-├── 📂 configs/ # Конфигурационные файлы
-├── 📂 logs/ # Логи выполнения
-├── 📂 backups/ # Резервные копии
-├── 📂 reports/ # Автоматические отчеты
-├── 📂 metrics/ # Собранные метрики
-├── 📂 alerts/ # История оповещений
-├── 📂 ssl-reports/ # Отчеты SSL сертификатов
-└── 📂 tests/ # Тесты и проверки
+system-admin-portfolio/  
+├── 📂 scripts/ # Основные скрипты  
+│ ├── 🚨 alert-system.sh # Система оповещений (Email, Telegram)  
+│ ├── 💾 backup-manager.sh # Умное резервное копирование  
+│ ├── ⚙️ service-manager.sh # Управление системными сервисами  
+│ ├── 🖥️ system-monitor.sh # Мониторинг ресурсов в реальном времени  
+│ ├── 🔐 ssl-cert-checker.sh # Мониторинг SSL сертификатов  
+│ ├── 👥 user-manager.sh # Управление пользователями и группами  
+│ ├── 🛡️ security-audit.sh # Комплексная проверка безопасности  
+│ ├── 🔥 process-monitor.sh # Мониторинг процессов и ресурсов  
+│ ├── 🌐 network-analyzer.sh # Анализ сети и диагностика  
+│ ├── 💽 disk-manager.sh # Управление дисками и LVM  
+│ ├── 🐳 docker-manager.sh # Управление Docker контейнерами  
+│ ├── 📦 package-manager.sh # Управление пакетами и обновлениями  
+│ ├── 🕐 cron-manager.sh # Управление cron заданиями  
+│ ├── 📊 metrics-collector.sh # Сбор и анализ метрик  
+│ ├── 📄 log-analyzer.sh # Анализ логов в реальном времени  
+│ ├── 🔧 firewall-manager.sh # Управление фаерволом  
+│ ├── 🐳 install-docker.sh # Автоматическая установка Docker  
+│ ├── 🔧 git-helper.sh # Продвинутый Git помощник  
+│ └── 🧪 test-all-scripts.sh # Комплексное тестирование  
+├── 📂 docs/ # Подробная документация  
+├── 📂 configs/ # Конфигурационные файлы  
+├── 📂 logs/ # Логи выполнения  
+├── 📂 backups/ # Резервные копии  
+├── 📂 reports/ # Автоматические отчеты  
+├── 📂 metrics/ # Собранные метрики  
+├── 📂 alerts/ # История оповещений  
+├── 📂 ssl-reports/ # Отчеты SSL сертификатов  
+└── 📂 tests/ # Тесты и проверки  
 text
 
 
